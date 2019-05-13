@@ -3,7 +3,7 @@
 
 function new_g()
   -- set up a new game with all its components, and sizing to draw
-  return {
+  local g = {
     -- render colors and game sizes
     ["bc"] = 0,
     ["wc"] = 1,
@@ -11,17 +11,36 @@ function new_g()
     ["y"] = 0,
     ["w"] = 100,
     ["h"] = 128,
+    ["ew"] = 3, -- edge width
+    ["lw"] = 8, -- lane width, for inlanes/drains
     -- members
     ["bs"] = {}, -- balls
     ["lfs"] = {}, -- left flippers
     ["rfs"] = {}, -- right flippers
   }
+  g["dw"] = g.lw * 1.25 -- drain width
+  return g
 end
 
 function draw_g(g)
   -- draw the game board and components
   cls(g.bc)
   rectfill(g.x, g.y, g.x + g.w, g.y + g.h, g.wc)
+  local r = g.w / 2 - g.ew -- top cutout radius
+
+  circfill(g.x + g.w / 2, g.y + r + g.ew, r, g.bc)
+  rectfill(g.x + g.ew, g.y + r, g.x + g.w - g.ew, g.y + g.h, g.bc) -- bottom hollow
+  -- rectfill(g.x + g.w / 2 - bw, g.y + g.h - p, g.x + g.w / 2 + bw, g.y + g.h, g.bc) -- drain
+  -- rectfill(g.x + p, g.y + g.h - p, g.x + p + bw, g.y + g.h, g.bc) -- l outlane
+
+  rectfill(g.x + g.ew + g.lw, g.y + g.h - 3 * g.lw, g.x + g.w / 2 - g.dw, g.y + g.h, g.wc) -- l inlane
+  rectfill(g.x + g.w - g.ew - g.lw, g.y + g.h - 3 * g.lw, g.x + g.w / 2 + g.dw, g.y + g.h, g.wc) -- r inlane
+
+
+  -- spr(17, g.x + g.w / 2 - bw * 4, g.y + g.h - p - bw - 16, 2, 2)-- l slingshot
+  -- rectfill(g.x + g.w - p, g.y + g.h - p, g.x + g.w - p - bw, g.y + g.h, g.bc) -- r outlane
+  -- r slingshot
+
 
   for f in all(g.lfs) do
     draw_f(f)
@@ -74,6 +93,7 @@ end
 
 function draw_b(b)
   spr(b.spr, b.x, b.y)
+  line(b.x + 4, b.y + 4, b.x + 4 + b.vx, b.y + 4 + b.vy, 10) -- xxx collision line
 end
 
 function move_b(b)
