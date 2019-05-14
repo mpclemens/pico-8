@@ -12,21 +12,23 @@ function new_g()
     ["w"] = 110,
     ["h"] = 128,
     ["ew"] = 3, -- edge width
-    ["lw"] = 8, -- lane width, for inlanes/drains
+    ["lw"] = 9, -- lane width, for inlanes/drains
     -- objects in the world
     ["bs"] = {}, -- balls
     ["lfs"] = {}, -- left flippers
     ["rfs"] = {}, -- right flippers
+    ["pbs"] = {}, -- pop bumpers
     ["os"] = {}, -- all objects
     -- max velocity magnitudes
     ["mvx"] = 3,
-    ["mvy"] = 3,
+    ["mvy"] = 11,
     -- bump elasticity, per material (pixel color of bump)
     ["el"] = {
-      [1] = 0.25, -- wall color, also set above
-      [6] = 0.4, -- ball outer color
-      [10] = 0.7, -- yellow kicker color
-      [14] = 0.2, -- pink flipper color
+      [1] = 0.5, -- wall color, also set above
+      [6] = 1.5, -- ball outer
+      [10] = 1, -- yellow kicker
+      [12] = 1, -- pop bumper
+      [14] = 0.3, -- pink flipper
     }
   }
   g["dw"] = g.lw * 1.5 -- drain width
@@ -34,33 +36,32 @@ function new_g()
 end
 
 function init_g(g)
-  g.os = {}
-  g.bs = {}
-  g.lfs = {}
-  g.rfs = {}
 
-  add_o(g, new_b(40, 20, rnd(4) - 2, rnd(4) - 2))
-  add_o(g, new_b(50, 20, rnd(4) - 2, rnd(4) - 2))
-  add_o(g, new_b(60, 20, rnd(4) - 2, rnd(4) - 2))
+  -- clear any previously created objects
+  for o in all(g.os) do
+    g[o["t"].."s"] = {}
+  end
+  g.o = {}
 
   -- properties set in draw_g()
   add_o(g, new_lf())
   add_o(g, new_rf())
+
+  -- properties set in draw_g()
+  add_o(g, new_pb())
+  add_o(g, new_pb())
+  add_o(g, new_pb())
 
   return g
 end
 
 function add_o(g, o)
   -- add an object to the world, classified by its 't' (type) key
-  add(g.os, o)
   o.g = g
-  if o.t == 'b' then
-    add(g.bs, o)
-  elseif o.t == 'lf' then
-    add(g.lfs, o)
-  elseif o.t == 'rf' then
-    add(g.rfs, o)
-  end
+  add(g.os, o)
+  -- pluralize the type and store in dedicated tables
+  local k = o.t.."s"
+  add(g[k], o)
 end
 
 function draw_g(g)
@@ -69,7 +70,7 @@ function draw_g(g)
   rectfill(g.x, g.y, g.x + g.w, g.y + g.h, g.wc)
   local r = g.w / 2 - g.ew -- top cutout radius
 
-  circfill(g.x + g.w / 2, g.y + r + g.ew, r, g.bc)
+  circfill(g.x + g.w / 2, g.y + r + g.ew, r, g.bc) -- top cutout
   rectfill(g.x + g.ew, g.y + r, g.x + g.w - g.ew, g.y + g.h, g.bc) -- bottom hollow
 
   -- inlanes is a rect, with a circle cutout for the drain and two flippers
@@ -77,6 +78,7 @@ function draw_g(g)
   local ily = g.y + g.h - ilr -- inlane starting "y" value
   rectfill(g.x + g.ew + g.lw, ily, g.x + g.w - g.ew - g.lw, g.y + g.h - g.ew, g.wc) -- inlane walls
   circfill(g.x + g.w / 2, ily, ilr, g.bc) -- inlane cutout
+
 
   -- lflip
   g.lfs[1].x = g.x + g.w / 2 - g.dw - g.lfs[1].w / 2
@@ -89,6 +91,17 @@ function draw_g(g)
   spr(17, g.x + g.ew + g.lw, ily - 16, 2, 2)-- l sling
   spr(19, g.x + g.w - g.ew - g.lw - 16 + 1, ily - 16, 2, 2)-- r sling
 
+  -- pop bumpers
+  g.pbs[1].x = g.x + g.w / 2 - r / 3 - g.pbs[1].w
+  g.pbs[1].y = g.y + r / 2 + g.ew
+
+  g.pbs[2].x = g.x + g.w / 2 + r / 3
+  g.pbs[2].y = g.pbs[1].y
+
+  g.pbs[3].x = g.x + g.w / 2 - g.pbs[1].w / 2
+  g.pbs[3].y = g.pbs[1].y + g.pbs[1].h
+
+  --
   for f in all(g.lfs) do
     draw_f(f)
   end
@@ -104,6 +117,10 @@ function draw_g(g)
       del(g.bs, b)
     end
   end
+
+  for pb in all(g.pbs) do
+    draw_pb(pb)
+  end
 end
 
 function update_g(g)
@@ -115,6 +132,7 @@ function update_g(g)
 
   -- reset
   if (btnp(4)) then
+    sfx(0)
     init_g(g)
   end
 
@@ -134,11 +152,18 @@ function update_g(g)
     f.up = btn(1)
   end
 
-  -- add-a-ball for xxx testing, down-arrow
-  if (btnp(3)) then
+  -- add-a-ball
+  if (btnp(2)) then
     if (#g.bs < 5) then
-      sfx(1)
-      add_o(g, new_b(g.x + g.w / 2, g.y + g.w / 4 - g.ew, rnd(4) - 3, rnd(4) - 3))
+      sfx(3)
+      local b
+      b = new_b(g.x + g.w / 2, g.y + g.ew * 2 )
+      b.x = b.x - b.w / 2
+      -- b.y = b.y - b.h
+      b.vx = rnd(g.mvx) - g.mvx / 2
+      b.vy = rnd(g.mvy) - g.mvy / 2
+
+      add_o(g, b)
     else
       sfx(2)
     end
@@ -165,7 +190,6 @@ end
 
 function draw_b(b)
   spr(b.spr, b.x, b.y)
-  --  line(b.x + b.w / 2, b.y + b.h / 2, b.x + b.w / 2 + b.vx * 5, b.y + b.h / 2 + b.vy * 5, 7) -- xxx move vector
 end
 
 function move_b(b)
@@ -182,24 +206,20 @@ function move_b(b)
   end
 
   -- friction!
-  b.vx = b.vx * 0.99
+  b.vx = b.vx * 0.97
   b.vy = b.vy * 0.97
 
   -- gravity!
-  b.vy = b.vy + 0.2
-
-  -- quantum!
-  -- b.vx = b.vx + (rnd(10) - 5) / 1000
+  b.vy = b.vy + 0.3
 
   -- not moving
   if abs(b.vx) <= 0.25 and abs(b.vy) <= 0.25 then return end
 
   -- velocity cap
-  -- if abs(b.vx) > g.mvx then b.vx = g.mvx * sgn(b.vx) end
-  -- if abs(b.vy) > g.mvy then b.vy = g.mvy * sgn(b.vy) end
+  if abs(b.vx) > g.mvx then b.vx = g.mvx * sgn(b.vx) end
+  if abs(b.vy) > g.mvy then b.vy = g.mvy * sgn(b.vy) end
 
   bump_b(b)
-
 
   b.x = b.x + b.vx
   b.y = b.y + b.vy
@@ -301,4 +321,14 @@ end
 
 function draw_f(f)
   spr((f.up and f.spr[2] or f.spr[1]), f.x, f.y, f["w"] / 8, f["h"] / 8)
+end
+
+-- POP BUMPERS
+
+function new_pb(x, y)
+  return {["t"] = "pb", ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 16, ["lit"] = false, ["spr"] = 21}
+end
+
+function draw_pb(pb)
+  spr(pb.spr, pb.x, pb.y, pb["w"] / 8, pb["h"] / 8)
 end
