@@ -5,37 +5,62 @@ function new_g()
   -- set up a new game with all its components, and sizing to draw
   local g = {
     -- render colors and game sizes
-    ["bc"] = 0,
-    ["wc"] = 1,
+    ["bc"] = 0, -- background color
+    ["wc"] = 1, -- wall color
     ["x"] = 10,
     ["y"] = 0,
     ["w"] = 110,
     ["h"] = 128,
     ["ew"] = 3, -- edge width
     ["lw"] = 8, -- lane width, for inlanes/drains
-    -- members
+    -- objects in the world
     ["bs"] = {}, -- balls
     ["lfs"] = {}, -- left flippers
     ["rfs"] = {}, -- right flippers
+    ["os"] = {}, -- all objects
+    -- max velocity magnitudes
+    ["mvx"] = 3,
+    ["mvy"] = 3,
+    -- bump elasticity, per material (pixel color of bump)
+    ["el"] = {
+      [1] = 0.25, -- wall color, also set above
+      [6] = 0.4, -- ball outer color
+      [10] = 0.7, -- yellow kicker color
+      [14] = 0.2, -- pink flipper color
+    }
   }
-  g["dw"] = g.lw * 1.25 -- drain width
+  g["dw"] = g.lw * 1.5 -- drain width
   return g
 end
 
 function init_g(g)
-  g.bs = {
-    new_b(g, 40, 20, rnd(4) - 2, rnd(4) - 2),
-    new_b(g, 50, 20, rnd(4) - 2, rnd(4) - 2),
-    new_b(g, 60, 20, rnd(4) - 2, rnd(4) - 2)
-  }
+  g.os = {}
+  g.bs = {}
+  g.lfs = {}
+  g.rfs = {}
 
-  g.lfs = {
-    new_lf()
-  }
-  g.rfs = {
-    new_rf()
-  }
+  add_o(g, new_b(40, 20, rnd(4) - 2, rnd(4) - 2))
+  add_o(g, new_b(50, 20, rnd(4) - 2, rnd(4) - 2))
+  add_o(g, new_b(60, 20, rnd(4) - 2, rnd(4) - 2))
+
+  -- properties set in draw_g()
+  add_o(g, new_lf())
+  add_o(g, new_rf())
+
   return g
+end
+
+function add_o(g, o)
+  -- add an object to the world, classified by its 't' (type) key
+  add(g.os, o)
+  o.g = g
+  if o.t == 'b' then
+    add(g.bs, o)
+  elseif o.t == 'lf' then
+    add(g.lfs, o)
+  elseif o.t == 'rf' then
+    add(g.rfs, o)
+  end
 end
 
 function draw_g(g)
@@ -46,21 +71,19 @@ function draw_g(g)
 
   circfill(g.x + g.w / 2, g.y + r + g.ew, r, g.bc)
   rectfill(g.x + g.ew, g.y + r, g.x + g.w - g.ew, g.y + g.h, g.bc) -- bottom hollow
-  -- rectfill(g.x + g.w / 2 - bw, g.y + g.h - p, g.x + g.w / 2 + bw, g.y + g.h, g.bc) -- drain
-  -- rectfill(g.x + p, g.y + g.h - p, g.x + p + bw, g.y + g.h, g.bc) -- l outlane
 
-  -- inlanes is a rect, with a circle cutout and two flippers
-  local ilr = g.dw * 2.5 -- radius of inline cutout
+  -- inlanes is a rect, with a circle cutout for the drain and two flippers
+  local ilr = g.dw * 2 -- radius of inline cutout
   local ily = g.y + g.h - ilr -- inlane starting "y" value
   rectfill(g.x + g.ew + g.lw, ily, g.x + g.w - g.ew - g.lw, g.y + g.h - g.ew, g.wc) -- inlane walls
   circfill(g.x + g.w / 2, ily, ilr, g.bc) -- inlane cutout
 
   -- lflip
-  g.lfs[1].x = g.x + g.w / 2 - g.dw * 2
+  g.lfs[1].x = g.x + g.w / 2 - g.dw - g.lfs[1].w / 2
   g.lfs[1].y = g.y + g.h - g.lfs[1].h + g.ew
 
   -- rflip
-  g.rfs[1].x = g.x + g.w / 2 + g.dw * 2 - g.rfs[1].w
+  g.rfs[1].x = g.x + g.w / 2 + g.dw - g.rfs[1].w / 2
   g.rfs[1].y = g.y + g.h - g.rfs[1].h + g.ew
 
   spr(17, g.x + g.ew + g.lw, ily - 16, 2, 2)-- l sling
@@ -115,7 +138,7 @@ function update_g(g)
   if (btnp(3)) then
     if (#g.bs < 5) then
       sfx(1)
-      add(g.bs, new_b(g, g.x + g.w / 2, g.y + g.w / 2 - g.ew, rnd(4) - 3, rnd(4) - 3))
+      add_o(g, new_b(g.x + g.w / 2, g.y + g.w / 4 - g.ew, rnd(4) - 3, rnd(4) - 3))
     else
       sfx(2)
     end
@@ -124,15 +147,17 @@ end
 
 -- BALLS
 
-function new_b(g, x, y, vx, vy)
+function new_b(x, y, vx, vy)
   return {
-    ["g"] = g, -- containing game reference
+    ["t"] = "b", -- type
+    ["g"] = nil, -- parent game
     ["x"] = x,
     ["y"] = y,
-    ["w"] = 6, -- actual visible pixels of sprite
-    ["h"] = 6,
+    ["w"] = 8, -- sprite dimensions
+    ["h"] = 8,
     ["vx"] = (vx == nil and 0 or vx),
     ["vy"] = (vy == nil and 0 or vy),
+    ["ci"] = {}, -- collision information
     ["spr"] = 1,
     ["live"] = true
   }
@@ -143,25 +168,18 @@ function draw_b(b)
   --  line(b.x + b.w / 2, b.y + b.h / 2, b.x + b.w / 2 + b.vx * 5, b.y + b.h / 2 + b.vy * 5, 7) -- xxx move vector
 end
 
-function sgn(n)
-  -- -1 if n < 0, 0 if n == 0, 1 if n > 0
-  if n == 0 then
-    return 0
-  end
-
-  return n / abs(n)
-end
-
 function move_b(b)
 
-  -- out of bounds
-  if b.x < b.g.x or b.x > b.g.x + b.g.w or b.y < b.g.y or b.y > b.g.y + b.g.h then
+  local g = b.g
+  -- center of the ball
+  local cx = b.x + b.w / 2
+  local cy = b.y + b.h / 2
+
+  -- ball is out of bounds
+  if cx < g.x or cx > g.x + g.w or cy < g.y or cy > g.y + g.h then
     b.live = false
     return
   end
-
-  local newx = b.x + b.vx
-  local newy = b.y + b.vy
 
   -- friction!
   b.vx = b.vx * 0.99
@@ -171,23 +189,98 @@ function move_b(b)
   b.vy = b.vy + 0.2
 
   -- quantum!
-  b.vx = b.vx + (rnd(10) - 5) / 1000
+  -- b.vx = b.vx + (rnd(10) - 5) / 1000
 
   -- not moving
   if abs(b.vx) <= 0.25 and abs(b.vy) <= 0.25 then return end
 
-  -- check the new x and new y for collisions
-  local nx = b.x + b.w + b.vx * sgn(b.vx)
-  local ny = b.y + b.h + b.vy * sgn(b.vy)
+  -- velocity cap
+  -- if abs(b.vx) > g.mvx then b.vx = g.mvx * sgn(b.vx) end
+  -- if abs(b.vy) > g.mvy then b.vy = g.mvy * sgn(b.vy) end
 
-  -- xxx better checker here, identify what was hit
-  if pget(nx, ny) ~= b.g.bc then
-    b.vx = 0 - b.vx
-    b.vy = 0 - b.vy
-  end
+  bump_b(b)
+
 
   b.x = b.x + b.vx
   b.y = b.y + b.vy
+end
+
+function bump_b(b)
+  -- set collision information for the given ball
+
+  --[[since the "ball" is really just a chunky block, check the surrounding
+  pixels for non-background colors]]
+
+  local bumped = false
+
+  -- top and bottom, outer corners
+
+  local x, y, c
+
+  -- done as while loops to allow fast breakout when a collision is found
+  -- top and bottom, outer corners
+  x = b.x
+  while not bumped and x <= b.x + b.w do
+    y = b.y
+    while not bumped and y <= b.y + b.h do
+      c = pget(x, y)
+      if c ~= b.g.bc then
+        b.ci = {["x"] = x, ["y"] = y, ["c"] = c}
+        bumped = true
+      end
+      y = y + b.h
+    end
+    x = x + 1
+  end
+
+  -- sides, with no corner overlap
+  x = b.x
+  while not bumped and x <= b.x + b.w do
+    y = b.y + 1
+    while not bumped and y <= b.y + b.h - 1 do
+      c = pget(x, y)
+      if c ~= b.g.bc then
+        b.ci = {["x"] = x, ["y"] = y, ["c"] = c}
+        bumped = true
+      end
+      y = y + 1
+    end
+    x = x + b.w
+  end
+
+  -- four inner corner "bites"
+  x = b.x + 1
+  while not bumped and x <= b.x + b.w - 1 do
+    y = b.y + 1
+    while y <= b.y + b.h - 1 do
+      c = pget(x, y)
+      if c ~= b.g.bc then
+        b.ci = {["x"] = x, ["y"] = y, ["c"] = c}
+        bumped = true
+      end
+      y = y + b.h - 2
+    end
+    x = x + b.w - 2
+  end
+
+
+  if bumped then
+    sfx(1)
+    c = b.ci.c
+    -- adjust vectors based on the quadrant of the bump
+
+    if g.el[c] then
+      -- bump with a force depending on the impact direction and material bumped
+      b.vx = 0 - b.vx + ((b.x + b.w / 2) - (b.ci.x)) / b.w * g.el[c]
+      b.vy = 0 - b.vy + ((b.y + b.h / 2) - (b.ci.y)) / b.h * g.el[c]
+    end
+    -- if it's a wall or ball color, bounce appropriately
+    -- otherwise look up the sprite at the location and determine what to do
+    -- based on the type and state (bumpeder, flipper, rollover, etc.)
+  else
+    b.ci = {}
+  end
+
 end
 
 function nudge_b(b)
@@ -199,11 +292,11 @@ end
 -- FLIPPERS
 
 function new_lf(x, y)
-  return {["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 8, ["up"] = false, ["spr"] = {2, 6}}
+  return {["t"] = "lf", ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 8, ["up"] = false, ["spr"] = {2, 6}}
 end
 
 function new_rf(x, y)
-  return {["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 8, ["up"] = false, ["spr"] = {4, 8}}
+  return {["t"] = "rf", ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 8, ["up"] = false, ["spr"] = {4, 8}}
 end
 
 function draw_f(f)
