@@ -2,7 +2,7 @@
 -- GAMES
 
 function new_g()
-  -- set up a new game with all its components, and sizing to draw
+  -- set on a new game with all its components, and sizing to draw
   local g = {
     -- render colors and game sizes
     ["bc"] = 0, -- background color
@@ -18,10 +18,14 @@ function new_g()
     ["lfs"] = {}, -- left flippers
     ["rfs"] = {}, -- right flippers
     ["pbs"] = {}, -- pop bumpers
+    ["lss"] = {}, -- left slingshots
+    ["rss"] = {}, -- right slingshots
     ["os"] = {}, -- all objects
+    -- objects indexed by x,y coords that they occony, for ball-bump handling
+    ["oi"] = {},
     -- max velocity magnitudes
     ["mvx"] = 3,
-    ["mvy"] = 11,
+    ["mvy"] = 3,
     -- bump elasticity, per material (pixel color of bump)
     ["el"] = {
       [1] = 0.5, -- wall color, also set above
@@ -31,37 +35,80 @@ function new_g()
       [14] = 0.3, -- pink flipper
     }
   }
+  g["r"] = g.w / 2 - g.ew -- top cutout radius
   g["dw"] = g.lw * 1.5 -- drain width
+  g["ilr"] = g.dw * 2 -- radius of inline cutout
+  g["ily"] = g.y + g.h - g.ilr -- inlane starting "y" value
+
   return g
 end
 
 function init_g(g)
-
+  local o
   -- clear any previously created objects
-  for o in all(g.os) do
-    g[o["t"].."s"] = {}
+
+  if (#g.os > 0) then
+    for o in all(g.os) do
+      g[o.t.."s"] = {}
+    end
+    g.os = {}
   end
-  g.o = {}
 
-  -- properties set in draw_g()
-  add_o(g, new_lf())
-  add_o(g, new_rf())
+  -- flippers
+  o = new_lf()
+  o.x = g.x + g.w / 2 - g.dw - o.w / 2
+  o.y = g.y + g.h - o.h + g.ew
+  add_o(g, o)
 
-  -- properties set in draw_g()
-  add_o(g, new_pb())
-  add_o(g, new_pb())
-  add_o(g, new_pb())
+  o = new_rf()
+  o.x = g.x + g.w / 2 + g.dw - o.w / 2
+  o.y = g.y + g.h - o.h + g.ew
+  add_o(g, o)
+
+  -- pop bumpers
+  o = new_pb()
+  o.x = g.x + g.w / 2 - g.r / 3 - o.w
+  o.y = g.y + g.r / 2 + g.ew
+  local pop_y = o.y
+  add_o(g, o)
+
+  o = new_pb()
+  o.x = g.x + g.w / 2 + g.r / 3
+  o.y = pop_y
+  add_o(g, o)
+
+  o = new_pb()
+  o.x = g.x + g.w / 2 - o.w / 2
+  o.y = pop_y + o.h
+  add_o(g, o)
+
+  -- slings
+  o = new_ls( g.x + g.ew + g.lw, g.ily - 16)
+  add_o(g, o)
+
+  o = new_rs( g.x + g.w - g.ew - g.lw - 16 + 1, g.ily - 16)
+  add_o(g, o)
 
   return g
 end
 
 function add_o(g, o)
-  -- add an object to the world, classified by its 't' (type) key
+  -- add an object to the world, claslified by its 't' (type) key
   o.g = g
   add(g.os, o)
   -- pluralize the type and store in dedicated tables
   local k = o.t.."s"
   add(g[k], o)
+
+  -- save the pixels covrered by the object for ball collisions
+  local x, y
+  if o.t ~= "b" then
+    for x = o.x, o.x + o.w do
+      for y = o.y, o.y + o.h do
+        g.oi[x..","..y] = o
+      end
+    end
+  end
 end
 
 function draw_g(g)
@@ -74,32 +121,8 @@ function draw_g(g)
   rectfill(g.x + g.ew, g.y + r, g.x + g.w - g.ew, g.y + g.h, g.bc) -- bottom hollow
 
   -- inlanes is a rect, with a circle cutout for the drain and two flippers
-  local ilr = g.dw * 2 -- radius of inline cutout
-  local ily = g.y + g.h - ilr -- inlane starting "y" value
-  rectfill(g.x + g.ew + g.lw, ily, g.x + g.w - g.ew - g.lw, g.y + g.h - g.ew, g.wc) -- inlane walls
-  circfill(g.x + g.w / 2, ily, ilr, g.bc) -- inlane cutout
-
-
-  -- lflip
-  g.lfs[1].x = g.x + g.w / 2 - g.dw - g.lfs[1].w / 2
-  g.lfs[1].y = g.y + g.h - g.lfs[1].h + g.ew
-
-  -- rflip
-  g.rfs[1].x = g.x + g.w / 2 + g.dw - g.rfs[1].w / 2
-  g.rfs[1].y = g.y + g.h - g.rfs[1].h + g.ew
-
-  spr(17, g.x + g.ew + g.lw, ily - 16, 2, 2)-- l sling
-  spr(19, g.x + g.w - g.ew - g.lw - 16 + 1, ily - 16, 2, 2)-- r sling
-
-  -- pop bumpers
-  g.pbs[1].x = g.x + g.w / 2 - r / 3 - g.pbs[1].w
-  g.pbs[1].y = g.y + r / 2 + g.ew
-
-  g.pbs[2].x = g.x + g.w / 2 + r / 3
-  g.pbs[2].y = g.pbs[1].y
-
-  g.pbs[3].x = g.x + g.w / 2 - g.pbs[1].w / 2
-  g.pbs[3].y = g.pbs[1].y + g.pbs[1].h
+  rectfill(g.x + g.ew + g.lw, g.ily, g.x + g.w - g.ew - g.lw, g.y + g.h - g.ew, g.wc) -- inlane walls
+  circfill(g.x + g.w / 2, g.ily, g.ilr, g.bc) -- inlane cutout
 
   --
   for f in all(g.lfs) do
@@ -119,12 +142,40 @@ function draw_g(g)
   end
 
   for pb in all(g.pbs) do
+    if pb.b then
+      -- bumped by a ball, change the ball here xxx
+      pb.on = true
+      pb.b = nil
+    elseif pb.on then
+      pb.on = false
+    end
     draw_pb(pb)
+  end
+
+  for sl in all(g.rss) do
+    if sl.b then
+      -- bumped by a ball, change the ball here xxx
+      sl.on = true
+      sl.b = nil
+    elseif sl.on then
+      sl.on = false
+    end
+    draw_sl(sl)
+  end
+
+  for sl in all(g.lss) do
+    if sl.b then
+      -- bumped by a ball, change the ball here xxx
+      sl.on = true
+      sl.b = nil
+    elseif sl.on then
+      sl.on = false
+    end
+    draw_sl(sl)
   end
 end
 
 function update_g(g)
-
   -- update ball positions
   for b in all(g.bs) do
     if b.live then move_b(b) end
@@ -145,11 +196,11 @@ function update_g(g)
 
   -- flipper controls
   for f in all(g.lfs) do
-    f.up = btn(0)
+    f.on = btn(0)
   end
 
   for f in all(g.rfs) do
-    f.up = btn(1)
+    f.on = btn(1)
   end
 
   -- add-a-ball
@@ -168,6 +219,17 @@ function update_g(g)
       sfx(2)
     end
   end
+end
+
+function find_o(g, x, y)
+
+  --[[ return the object at the given x,y coord it's not a background pixel]]
+  if pget(x, y) == g.bc then
+    return nil
+  end
+
+  -- sfx(4) -- xxx
+  return g.oi[x..","..y]
 end
 
 -- BALLS
@@ -206,8 +268,8 @@ function move_b(b)
   end
 
   -- friction!
-  b.vx = b.vx * 0.97
-  b.vy = b.vy * 0.97
+  b.vx = b.vx * 0.90
+  b.vx = b.vx * 0.95
 
   -- gravity!
   b.vy = b.vy + 0.3
@@ -285,7 +347,15 @@ function bump_b(b)
 
 
   if bumped then
-    sfx(1)
+    b.ci.x = flr(b.ci.x)
+    b.ci.y = flr(b.ci.y)
+
+    local o = find_o(b.g, b.ci.x, b.ci.y)
+    if o then
+      -- tell the bumped object who bumped it
+      o.b = b
+    end
+
     c = b.ci.c
     -- adjust vectors based on the quadrant of the bump
 
@@ -295,7 +365,7 @@ function bump_b(b)
       b.vy = 0 - b.vy + ((b.y + b.h / 2) - (b.ci.y)) / b.h * g.el[c]
     end
     -- if it's a wall or ball color, bounce appropriately
-    -- otherwise look up the sprite at the location and determine what to do
+    -- otherwise look on the sprite at the location and determine what to do
     -- based on the type and state (bumpeder, flipper, rollover, etc.)
   else
     b.ci = {}
@@ -312,23 +382,45 @@ end
 -- FLIPPERS
 
 function new_lf(x, y)
-  return {["t"] = "lf", ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 8, ["up"] = false, ["spr"] = {2, 6}}
+  return new_f("lf", x, y)
 end
 
 function new_rf(x, y)
-  return {["t"] = "rf", ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 8, ["up"] = false, ["spr"] = {4, 8}}
+  return new_f("rf", x, y)
+end
+
+function new_f(t, x, y)
+  return {["t"] = t, ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 8, ["on"] = false}
 end
 
 function draw_f(f)
-  spr((f.up and f.spr[2] or f.spr[1]), f.x, f.y, f["w"] / 8, f["h"] / 8)
+  spr((f.on and 4 or 2), f.x, f.y, f.w / 8, f.h / 8, f.t == "rf")
+end
+
+-- SLINGSHOTS
+
+function new_ls(x, y)
+  return new_sl("ls", x, y)
+end
+
+function new_rs(x, y)
+  return new_sl("rs", x, y)
+end
+
+function new_sl(t, x, y)
+  return {["t"] = t, ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 16, ["on"] = false}
+end
+
+function draw_sl(sl)
+  spr((sl.on and 19 or 17), sl.x, sl.y, sl.w / 8, sl.h / 8, sl.t == "rs")
 end
 
 -- POP BUMPERS
 
 function new_pb(x, y)
-  return {["t"] = "pb", ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 16, ["lit"] = false, ["spr"] = 21}
+  return {["t"] = "pb", ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 16, ["on"] = false}
 end
 
 function draw_pb(pb)
-  spr(pb.spr, pb.x, pb.y, pb["w"] / 8, pb["h"] / 8)
+  spr((pb.on and 23 or 21), pb.x, pb.y, pb.w / 8, pb.h / 8)
 end
