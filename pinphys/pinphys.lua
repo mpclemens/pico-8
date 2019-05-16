@@ -1,5 +1,6 @@
-
--- GAMES
+---------
+--------- GAME
+---------
 
 function new_g()
   -- set on a new game with all its components, and sizing to draw
@@ -24,16 +25,8 @@ function new_g()
     -- objects indexed by x,y coords that they occony, for ball-bump handling
     ["oi"] = {},
     -- max velocity magnitudes
-    ["mvx"] = 3,
-    ["mvy"] = 3,
-    -- bump elasticity, per material (pixel color of bump)
-    ["el"] = {
-      [1] = 0.5, -- wall color, also set above
-      [6] = 1.5, -- ball outer
-      [10] = 1, -- yellow kicker
-      [12] = 1, -- pop bumper
-      [14] = 0.3, -- pink flipper
-    }
+    ["mvx"] = 5,
+    ["mvy"] = 5,
   }
   g["r"] = g.w / 2 - g.ew -- top cutout radius
   g["dw"] = g.lw * 1.5 -- drain width
@@ -66,10 +59,11 @@ function init_g(g)
   add_o(g, o)
 
   -- pop bumpers
+  local pop_y = g.y + g.r / 2 + g.ew
+
   o = new_pb()
   o.x = g.x + g.w / 2 - g.r / 3 - o.w
-  o.y = g.y + g.r / 2 + g.ew
-  local pop_y = o.y
+  o.y = pop_y
   add_o(g, o)
 
   o = new_pb()
@@ -79,7 +73,7 @@ function init_g(g)
 
   o = new_pb()
   o.x = g.x + g.w / 2 - o.w / 2
-  o.y = pop_y + o.h
+  o.y = pop_y + o.h * 3 / 2
   add_o(g, o)
 
   -- slings
@@ -92,24 +86,6 @@ function init_g(g)
   return g
 end
 
-function add_o(g, o)
-  -- add an object to the world, claslified by its 't' (type) key
-  o.g = g
-  add(g.os, o)
-  -- pluralize the type and store in dedicated tables
-  local k = o.t.."s"
-  add(g[k], o)
-
-  -- save the pixels covrered by the object for ball collisions
-  local x, y
-  if o.t ~= "b" then
-    for x = o.x, o.x + o.w do
-      for y = o.y, o.y + o.h do
-        g.oi[x..","..y] = o
-      end
-    end
-  end
-end
 
 function draw_g(g)
   -- draw the game board and components
@@ -133,19 +109,12 @@ function draw_g(g)
     draw_f(f)
   end
 
-  for b in all(g.bs) do
-    if b.live then
-      draw_b(b)
-    else
-      del(g.bs, b)
-    end
-  end
-
   for pb in all(g.pbs) do
     if pb.b then
-      -- bumped by a ball, change the ball here xxx
+      pb.b.vx = -pb.b.vx
+      pb.b.vy = -pb.b.vy
       pb.on = true
-      pb.b = nil
+      del(pb, b)
     elseif pb.on then
       pb.on = false
     end
@@ -154,7 +123,8 @@ function draw_g(g)
 
   for sl in all(g.rss) do
     if sl.b then
-      -- bumped by a ball, change the ball here xxx
+      -- sl.b.vx = -sl.b.vx * 0.8
+      -- sl.b.vy = -sl.b.vy * 0.8
       sl.on = true
       sl.b = nil
     elseif sl.on then
@@ -165,7 +135,8 @@ function draw_g(g)
 
   for sl in all(g.lss) do
     if sl.b then
-      -- bumped by a ball, change the ball here xxx
+      -- sl.b.vx = -sl.b.vx * 0.8
+      -- sl.b.vy = -sl.b.vy * 0.8
       sl.on = true
       sl.b = nil
     elseif sl.on then
@@ -173,15 +144,25 @@ function draw_g(g)
     end
     draw_sl(sl)
   end
+
+  --
+  for b in all(g.bs) do
+    draw_b(b)
+  end
+
 end
 
 function update_g(g)
-  -- update ball positions
+  -- move any existing balls
   for b in all(g.bs) do
-    if b.live then move_b(b) end
+    if b.live then
+      update_b(b)
+    else
+      del(g.bs, b)
+    end
   end
 
-  -- reset
+  -- reset button
   if (btnp(4)) then
     sfx(0)
     init_g(g)
@@ -190,7 +171,9 @@ function update_g(g)
   -- nudge controls
   if (btnp(5)) then
     for b in all(g.bs) do
-      if b.live then nudge_b(b) end
+      if b.live then
+        nudge_b(b)
+      end
     end
   end
 
@@ -211,7 +194,7 @@ function update_g(g)
       b = new_b(g.x + g.w / 2, g.y + g.ew * 2 )
       b.x = b.x - b.w / 2
       -- b.y = b.y - b.h
-      b.vx = rnd(g.mvx) - g.mvx / 2
+      b.vx = rnd(g.mvx * 2) - g.mvx / 2
       b.vy = rnd(g.mvy) - g.mvy / 2
 
       add_o(g, b)
@@ -221,18 +204,47 @@ function update_g(g)
   end
 end
 
-function find_o(g, x, y)
+---------
+--------- OBJECTS IN A GAME
+---------
 
-  --[[ return the object at the given x,y coord it's not a background pixel]]
+function add_o(g, o)
+  -- add an object to the world, claslified by its 't' (type) key
+  o.g = g
+
+
+  add(g.os, o)
+  -- pluralize the type and store in dedicated tables
+  local k = o.t.."s"
+  add(g[k], o)
+
+  -- save the pixels covrered by the object for ball collisions
+  o.x = flr(o.x)
+  o.y = flr(o.y)
+  if o.t ~= "b" then
+    for x = o.x, o.x + o.w do
+      for y = o.y, o.y + o.h do
+        g.oi[x..","..y] = o
+      end
+    end
+  end
+
+end
+
+
+function find_o(g, x, y)
+  x = flr(x)
+  y = flr(y)
+  -- return the game object at the given x,y coord
   if pget(x, y) == g.bc then
     return nil
   end
-
-  -- sfx(4) -- xxx
   return g.oi[x..","..y]
 end
 
--- BALLS
+---------
+--------- BALL OBJECTS
+---------
 
 function new_b(x, y, vx, vy)
   return {
@@ -244,7 +256,7 @@ function new_b(x, y, vx, vy)
     ["h"] = 8,
     ["vx"] = (vx == nil and 0 or vx),
     ["vy"] = (vy == nil and 0 or vy),
-    ["ci"] = {}, -- collision information
+    ["ci"] = nil, -- collision information
     ["spr"] = 1,
     ["live"] = true
   }
@@ -254,8 +266,7 @@ function draw_b(b)
   spr(b.spr, b.x, b.y)
 end
 
-function move_b(b)
-
+function update_b(b)
   local g = b.g
   -- center of the ball
   local cx = b.x + b.w / 2
@@ -266,6 +277,8 @@ function move_b(b)
     b.live = false
     return
   end
+
+  bump_b(b)
 
   -- friction!
   b.vx = b.vx * 0.90
@@ -281,29 +294,23 @@ function move_b(b)
   if abs(b.vx) > g.mvx then b.vx = g.mvx * sgn(b.vx) end
   if abs(b.vy) > g.mvy then b.vy = g.mvy * sgn(b.vy) end
 
-  bump_b(b)
-
   b.x = b.x + b.vx
   b.y = b.y + b.vy
 end
 
-function bump_b(b)
-  -- set collision information for the given ball
 
-  --[[since the "ball" is really just a chunky block, check the surrounding
-  pixels for non-background colors]]
+function bump_b(b)
+  -- check the empty pixels around the ball for a non-background color
 
   local bumped = false
-
-  -- top and bottom, outer corners
-
   local x, y, c
 
   -- done as while loops to allow fast breakout when a collision is found
+
   -- top and bottom, outer corners
-  x = b.x
+  x = flr(b.x)
   while not bumped and x <= b.x + b.w do
-    y = b.y
+    y = flr(b.y)
     while not bumped and y <= b.y + b.h do
       c = pget(x, y)
       if c ~= b.g.bc then
@@ -334,7 +341,7 @@ function bump_b(b)
   x = b.x + 1
   while not bumped and x <= b.x + b.w - 1 do
     y = b.y + 1
-    while y <= b.y + b.h - 1 do
+    while not bumped and y <= b.y + b.h - 1 do
       c = pget(x, y)
       if c ~= b.g.bc then
         b.ci = {["x"] = x, ["y"] = y, ["c"] = c}
@@ -345,39 +352,22 @@ function bump_b(b)
     x = x + b.w - 2
   end
 
-
   if bumped then
-    b.ci.x = flr(b.ci.x)
-    b.ci.y = flr(b.ci.y)
-
     local o = find_o(b.g, b.ci.x, b.ci.y)
     if o then
-      -- tell the bumped object who bumped it
-      o.b = b
+      o.b = b -- tell the bumped object who bumped it
+    else
+      -- bounce based on the location of the bumped pixel
+      b.vx = - b.vx + ((b.x + b.w / 2) - (b.ci.x)) / b.w * 0.8
+      b.vy = - b.vy + ((b.y + b.h / 2) - (b.ci.y)) / b.h * 0.8
     end
-
-    c = b.ci.c
-    -- adjust vectors based on the quadrant of the bump
-
-    if g.el[c] then
-      -- bump with a force depending on the impact direction and material bumped
-      b.vx = 0 - b.vx + ((b.x + b.w / 2) - (b.ci.x)) / b.w * g.el[c]
-      b.vy = 0 - b.vy + ((b.y + b.h / 2) - (b.ci.y)) / b.h * g.el[c]
-    end
-    -- if it's a wall or ball color, bounce appropriately
-    -- otherwise look on the sprite at the location and determine what to do
-    -- based on the type and state (bumpeder, flipper, rollover, etc.)
-  else
-    b.ci = {}
   end
-
 end
 
-function nudge_b(b)
-  b.vx = b.vx + rnd(2) - 1
-  b.vy = b.vy + rnd(6) - 3
-  -- xxx nudge cooldown
-end
+---------
+--------- FLIPPER OBJECTS
+---------
+
 
 -- FLIPPERS
 
@@ -390,12 +380,17 @@ function new_rf(x, y)
 end
 
 function new_f(t, x, y)
-  return {["t"] = t, ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 8, ["on"] = false}
+  return {["t"] = t, ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 8, ["bs"] = 0.5, ["on"] = false}
 end
 
 function draw_f(f)
   spr((f.on and 4 or 2), f.x, f.y, f.w / 8, f.h / 8, f.t == "rf")
 end
+
+---------
+--------- SLINGSHOT OBJECTS
+---------
+
 
 -- SLINGSHOTS
 
@@ -408,17 +403,22 @@ function new_rs(x, y)
 end
 
 function new_sl(t, x, y)
-  return {["t"] = t, ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 16, ["on"] = false}
+  return {["t"] = t, ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 16, ["bs"] = 1, ["on"] = false}
 end
 
 function draw_sl(sl)
   spr((sl.on and 19 or 17), sl.x, sl.y, sl.w / 8, sl.h / 8, sl.t == "rs")
 end
 
+---------
+--------- POP BUMPER OBJECTS
+---------
+
+
 -- POP BUMPERS
 
 function new_pb(x, y)
-  return {["t"] = "pb", ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 16, ["on"] = false}
+  return {["t"] = "pb", ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 16, ["bs"] = 1, ["on"] = false}
 end
 
 function draw_pb(pb)
