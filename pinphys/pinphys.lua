@@ -25,8 +25,8 @@ function new_g()
     -- objects indexed by x,y coords that they occony, for ball-bump handling
     ["oi"] = {},
     -- max velocity magnitudes
-    ["mvx"] = 5,
-    ["mvy"] = 5,
+    ["mvx"] = 3,
+    ["mvy"] = 3,
   }
   g["r"] = g.w / 2 - g.ew -- top cutout radius
   g["dw"] = g.lw * 1.5 -- drain width
@@ -37,6 +37,7 @@ function new_g()
 end
 
 function init_g(g)
+  srand(time())
   local o
   -- clear any previously created objects
 
@@ -111,10 +112,8 @@ function draw_g(g)
 
   for pb in all(g.pbs) do
     if pb.b then
-      pb.b.vx = -pb.b.vx
-      pb.b.vy = -pb.b.vy
       pb.on = true
-      del(pb, b)
+      pb.b = nil
     elseif pb.on then
       pb.on = false
     end
@@ -123,8 +122,6 @@ function draw_g(g)
 
   for sl in all(g.rss) do
     if sl.b then
-      -- sl.b.vx = -sl.b.vx * 0.8
-      -- sl.b.vy = -sl.b.vy * 0.8
       sl.on = true
       sl.b = nil
     elseif sl.on then
@@ -135,8 +132,6 @@ function draw_g(g)
 
   for sl in all(g.lss) do
     if sl.b then
-      -- sl.b.vx = -sl.b.vx * 0.8
-      -- sl.b.vy = -sl.b.vy * 0.8
       sl.on = true
       sl.b = nil
     elseif sl.on then
@@ -191,11 +186,9 @@ function update_g(g)
     if (#g.bs < 5) then
       sfx(3)
       local b
-      b = new_b(g.x + g.w / 2, g.y + g.ew * 2 )
-      b.x = b.x - b.w / 2
-      -- b.y = b.y - b.h
-      b.vx = rnd(g.mvx * 2) - g.mvx / 2
-      b.vy = rnd(g.mvy) - g.mvy / 2
+      b = new_b(g.x + g.w / 2, g.y + g.r / 2 )
+      b.vx = rnd(g.mvx + 1) - g.mvx / 2
+      b.vy = rnd(g.mvy + 1) - g.mvy / 2
 
       add_o(g, b)
     else
@@ -264,38 +257,39 @@ end
 
 function draw_b(b)
   spr(b.spr, b.x, b.y)
+  -- xxx movement vector
+  -- line(b.x + b.w / 2, b.y + b.h / 2, b.x + b.w / 2 + b.vx * 2, b.y + b.h / 2 + b.vy * 2, 10) -- xxx
 end
 
 function update_b(b)
   local g = b.g
+
+  bump_b(b)
+
   -- center of the ball
   local cx = b.x + b.w / 2
   local cy = b.y + b.h / 2
 
   -- ball is out of bounds
-  if cx < g.x or cx > g.x + g.w or cy < g.y or cy > g.y + g.h then
+  if b.x < g.x or b.x + b.w > g.x + g.w or b.y < g.y or b.y + b.h > g.y + g.h then
     b.live = false
     return
   end
 
-  bump_b(b)
-
   -- friction!
   b.vx = b.vx * 0.90
-  b.vx = b.vx * 0.95
+  b.vy = b.vy * 0.90
 
   -- gravity!
   b.vy = b.vy + 0.3
 
-  -- not moving
-  if abs(b.vx) <= 0.25 and abs(b.vy) <= 0.25 then return end
-
-  -- velocity cap
-  if abs(b.vx) > g.mvx then b.vx = g.mvx * sgn(b.vx) end
-  if abs(b.vy) > g.mvy then b.vy = g.mvy * sgn(b.vy) end
+  -- cap the magnitudes of the movement vectors
+  b.vx = mid(-g.mvx, b.vx, g.mvy)
+  b.vy = mid(-g.mvy, b.vy, g.mvy)
 
   b.x = b.x + b.vx
   b.y = b.y + b.vy
+
 end
 
 
@@ -305,12 +299,15 @@ function bump_b(b)
   local bumped = false
   local x, y, c
 
+  b.x = flr(b.x)
+  b.y = flr(b.y)
+
   -- done as while loops to allow fast breakout when a collision is found
 
-  -- top and bottom, outer corners
-  x = flr(b.x)
-  while not bumped and x <= b.x + b.w do
-    y = flr(b.y)
+  -- top and bottom, no outer corners
+  x = b.x + 1
+  while not bumped and x <= b.x + b.w - 1 do
+    y = b.y
     while not bumped and y <= b.y + b.h do
       c = pget(x, y)
       if c ~= b.g.bc then
@@ -354,14 +351,20 @@ function bump_b(b)
 
   if bumped then
     local o = find_o(b.g, b.ci.x, b.ci.y)
+    local cf = 0.25 -- collision factor
     if o then
       o.b = b -- tell the bumped object who bumped it
-    else
-      -- bounce based on the location of the bumped pixel
-      b.vx = - b.vx + ((b.x + b.w / 2) - (b.ci.x)) / b.w * 0.8
-      b.vy = - b.vy + ((b.y + b.h / 2) - (b.ci.y)) / b.h * 0.8
+      cf = o.cf
     end
+    -- bounce based on the location of the bumped pixel
+    b.vx = b.vx * (b.w / 2 - b.ci.x - b.x) / (b.w / 2) * cf
+    b.vy = b.vy * (b.h / 2 - b.ci.y - b.y) / (b.h / 2) * cf
   end
+end
+
+function nudge_b(b)
+  b.vx = b.vx + (rnd(4) - 2) / 2
+  b.vy = b.vy + (rnd(4) - 2) / 2
 end
 
 ---------
@@ -380,7 +383,7 @@ function new_rf(x, y)
 end
 
 function new_f(t, x, y)
-  return {["t"] = t, ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 8, ["bs"] = 0.5, ["on"] = false}
+  return {["t"] = t, ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 8, ["cf"] = 0.5, ["on"] = false}
 end
 
 function draw_f(f)
@@ -403,7 +406,7 @@ function new_rs(x, y)
 end
 
 function new_sl(t, x, y)
-  return {["t"] = t, ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 16, ["bs"] = 1, ["on"] = false}
+  return {["t"] = t, ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 16, ["cf"] = 0.6, ["on"] = false}
 end
 
 function draw_sl(sl)
@@ -418,7 +421,7 @@ end
 -- POP BUMPERS
 
 function new_pb(x, y)
-  return {["t"] = "pb", ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 16, ["bs"] = 1, ["on"] = false}
+  return {["t"] = "pb", ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 16, ["cf"] = 0.8, ["on"] = false}
 end
 
 function draw_pb(pb)
