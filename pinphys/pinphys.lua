@@ -8,7 +8,7 @@ function new_g()
     -- render colors and game sizes
     ["bc"] = 0, -- background color
     ["wc"] = 1, -- wall color
-    ["x"] = 10,
+    ["x"] = 0,
     ["y"] = 0,
     ["w"] = 110,
     ["h"] = 128,
@@ -25,13 +25,17 @@ function new_g()
     -- objects indexed by x,y coords that they occony, for ball-bump handling
     ["oi"] = {},
     -- max velocity magnitudes
-    ["mvx"] = 3,
-    ["mvy"] = 3,
+    ["mvx"] = 4,
+    ["mvy"] = 4,
   }
   g["r"] = g.w / 2 - g.ew -- top cutout radius
   g["dw"] = g.lw * 1.5 -- drain width
   g["ilr"] = g.dw * 2 -- radius of inline cutout
   g["ily"] = g.y + g.h - g.ilr -- inlane starting "y" value
+
+  -- debug message and cursor location to print at
+  g["cur"] = {["x"] = g.x + g.ew, ["y"] = g.y}
+  g["msg"] = "DEBUG"
 
   return g
 end
@@ -100,6 +104,11 @@ function draw_g(g)
   -- inlanes is a rect, with a circle cutout for the drain and two flippers
   rectfill(g.x + g.ew + g.lw, g.ily, g.x + g.w - g.ew - g.lw, g.y + g.h - g.ew, g.wc) -- inlane walls
   circfill(g.x + g.w / 2, g.ily, g.ilr, g.bc) -- inlane cutout
+
+  --
+  print(g.msg, g.cur.x, g.cur.y, 7)
+  -- cursor(g.curs.x, c.curs.y, 7)
+
 
   --
   for f in all(g.lfs) do
@@ -195,6 +204,17 @@ function update_g(g)
       sfx(2)
     end
   end
+
+  -- remove-a-ball
+  if (btnp(3)) then
+    if (#g.bs > 0) then
+      del(g.bs, g.bs[1])
+      sfx(4)
+    else
+      sfx(2)
+    end
+  end
+
 end
 
 ---------
@@ -205,13 +225,12 @@ function add_o(g, o)
   -- add an object to the world, claslified by its 't' (type) key
   o.g = g
 
-
   add(g.os, o)
   -- pluralize the type and store in dedicated tables
   local k = o.t.."s"
   add(g[k], o)
 
-  -- save the pixels covrered by the object for ball collisions
+  -- save the pixels covered by the object for ball collisions
   o.x = flr(o.x)
   o.y = flr(o.y)
   if o.t ~= "b" then
@@ -223,7 +242,6 @@ function add_o(g, o)
   end
 
 end
-
 
 function find_o(g, x, y)
   x = flr(x)
@@ -292,23 +310,22 @@ function update_b(b)
 
 end
 
-
 function bump_b(b)
   -- check the empty pixels around the ball for a non-background color
 
   local bumped = false
-  local x, y, c
+  local c
 
-  b.x = flr(b.x)
-  b.y = flr(b.y)
+  local bx = flr(b.x)
+  local by = flr(b.y)
 
   -- done as while loops to allow fast breakout when a collision is found
 
-  -- top and bottom, no outer corners
-  x = b.x + 1
-  while not bumped and x <= b.x + b.w - 1 do
-    y = b.y
-    while not bumped and y <= b.y + b.h do
+  -- top and bottom, including outer corners
+  x = bx
+  while not bumped and x <= bx + b.w do
+    y = by
+    while not bumped and y <= by + b.h do
       c = pget(x, y)
       if c ~= b.g.bc then
         b.ci = {["x"] = x, ["y"] = y, ["c"] = c}
@@ -319,11 +336,11 @@ function bump_b(b)
     x = x + 1
   end
 
-  -- sides, with no corner overlap
-  x = b.x
-  while not bumped and x <= b.x + b.w do
-    y = b.y + 1
-    while not bumped and y <= b.y + b.h - 1 do
+  -- sides, no outer corners
+  x = bx
+  while not bumped and x <= bx + b.w do
+    y = by + 1
+    while not bumped and y <= by + b.h - 1 do
       c = pget(x, y)
       if c ~= b.g.bc then
         b.ci = {["x"] = x, ["y"] = y, ["c"] = c}
@@ -334,31 +351,16 @@ function bump_b(b)
     x = x + b.w
   end
 
-  -- four inner corner "bites"
-  x = b.x + 1
-  while not bumped and x <= b.x + b.w - 1 do
-    y = b.y + 1
-    while not bumped and y <= b.y + b.h - 1 do
-      c = pget(x, y)
-      if c ~= b.g.bc then
-        b.ci = {["x"] = x, ["y"] = y, ["c"] = c}
-        bumped = true
-      end
-      y = y + b.h - 2
-    end
-    x = x + b.w - 2
-  end
-
   if bumped then
     local o = find_o(b.g, b.ci.x, b.ci.y)
     local cf = 0.25 -- collision factor
     if o then
       o.b = b -- tell the bumped object who bumped it
-      cf = o.cf
+      b.g.msg = sgn((bx + b.w / 2) - b.ci.x)..","..sgn((by + b.h / 2) - b.ci.y)
     end
-    -- bounce based on the location of the bumped pixel
-    b.vx = b.vx * (b.w / 2 - b.ci.x - b.x) / (b.w / 2) * cf
-    b.vy = b.vy * (b.h / 2 - b.ci.y - b.y) / (b.h / 2) * cf
+    -- bounce opposite the bumped pixel, relative to the ball center
+    b.vx = b.vx * sgn((bx + b.w / 2) - b.ci.x)
+    b.vy = b.vy * sgn((by + b.h / 2) - b.ci.y)
   end
 end
 
@@ -370,9 +372,6 @@ end
 ---------
 --------- FLIPPER OBJECTS
 ---------
-
-
--- FLIPPERS
 
 function new_lf(x, y)
   return new_f("lf", x, y)
@@ -394,9 +393,6 @@ end
 --------- SLINGSHOT OBJECTS
 ---------
 
-
--- SLINGSHOTS
-
 function new_ls(x, y)
   return new_sl("ls", x, y)
 end
@@ -416,9 +412,6 @@ end
 ---------
 --------- POP BUMPER OBJECTS
 ---------
-
-
--- POP BUMPERS
 
 function new_pb(x, y)
   return {["t"] = "pb", ["x"] = x, ["y"] = y, ["w"] = 16, ["h"] = 16, ["cf"] = 0.8, ["on"] = false}
