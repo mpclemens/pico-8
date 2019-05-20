@@ -109,7 +109,6 @@ function draw_g(g)
   print(g.msg, g.cur.x, g.cur.y, 7)
   -- cursor(g.curs.x, c.curs.y, 7)
 
-
   --
   for f in all(g.lfs) do
     draw_f(f)
@@ -279,19 +278,111 @@ function draw_b(b)
   -- line(b.x + b.w / 2, b.y + b.h / 2, b.x + b.w / 2 + b.vx * 2, b.y + b.h / 2 + b.vy * 2, 10) -- xxx
 end
 
+function draw_g(g)
+  -- draw the game board and components
+  cls(g.bc)
+  rectfill(45, 45, 60, 60, g.wc)
+  circfill(90, 100, 15, g.wc)
+  line(0, 60, 30, 70, g.wc)
+  line(80, 80, 100, 60, g.wc)
+
+  --
+  for b in all(g.bs) do
+    draw_b(b)
+  end
+
+end
+
+function update_g(g)
+  -- move any existing balls
+  for b in all(g.bs) do
+    if b.live then
+      update_b(b)
+    else
+      del(g.bs, b)
+    end
+  end
+
+  -- reset button
+  if (btnp(4)) then
+    sfx(0)
+    init_g(g)
+  end
+
+  -- nudge controls
+  if (btnp(5)) then
+    for b in all(g.bs) do
+      if b.live then
+        nudge_b(b)
+      end
+    end
+  end
+
+  -- add-a-ball
+  if (btnp(2)) then
+    if (#g.bs < 5) then
+      sfx(3)
+      local b
+      b = new_b(64, 32)
+      b.vx = rnd(g.mvx + 1) - g.mvx / 2
+      b.vy = rnd(g.mvy + 1) - g.mvy / 2
+
+      add_o(g, b)
+    else
+      sfx(2)
+    end
+  end
+
+  -- remove-a-ball
+  if (btnp(3)) then
+    if (#g.bs > 1) then
+      del(g.bs, g.bs[1])
+      sfx(4)
+    else
+      sfx(2)
+    end
+  end
+
+end
+
 function update_b(b)
   local g = b.g
-
-  bump_b(b)
 
   -- center of the ball
   local cx = b.x + b.w / 2
   local cy = b.y + b.h / 2
+  local touched = false -- is ball touching something?
+  local bx = flr(b.x)
+  local by = flr(b.y)
 
-  -- ball is out of bounds
-  if b.x < g.x or b.x + b.w > g.x + g.w or b.y < g.y or b.y + b.h > g.y + g.h then
-    b.live = false
-    return
+  -- top and bottom, including outer corners
+  x = bx
+  while not touched and x <= bx + b.w do
+    y = by
+    while not touched and y <= by + b.h do
+      c = pget(x, y)
+      if c ~= b.g.bc then
+        b.ci = {["x"] = x, ["y"] = y, ["c"] = c}
+        touched = true
+      end
+      y = y + b.h
+    end
+    x = x + 1
+  end
+
+  -- sides, no outer corners
+  x = bx
+  while not touched and x <= bx + b.w do
+    y = by + 1
+    while not touched and y <= by + b.h - 1 do
+      c = pget(x, y)
+      if c ~= b.g.bc then
+        b.ci = {["x"] = x, ["y"] = y, ["c"] = c}
+        touched = true
+      end
+      y = y + 1
+    end
+    x = x + b.w
   end
 
   -- friction!
@@ -301,67 +392,22 @@ function update_b(b)
   -- gravity!
   b.vy = b.vy + 0.3
 
+  if touched then
+    -- if another object was touched, let it update itself
+    local o = find_o(b.g, b.ci.x, b.ci.y)
+    if o then o.b = b end
+
+    -- bounce opposite the touched pixel, relative to the ball center
+    b.vx = b.vx + (cx - b.ci.x)
+    b.vy = b.vy + (cy - b.ci.y)
+  end
   -- cap the magnitudes of the movement vectors
   b.vx = mid(-g.mvx, b.vx, g.mvy)
   b.vy = mid(-g.mvy, b.vy, g.mvy)
 
-  b.x = b.x + b.vx
-  b.y = b.y + b.vy
+  b.x = (b.x + b.vx) % 128
+  b.y = (b.y + b.vy) % 128
 
-end
-
-function bump_b(b)
-  -- check the empty pixels around the ball for a non-background color
-
-  local bumped = false
-  local c
-
-  local bx = flr(b.x)
-  local by = flr(b.y)
-
-  -- done as while loops to allow fast breakout when a collision is found
-
-  -- top and bottom, including outer corners
-  x = bx
-  while not bumped and x <= bx + b.w do
-    y = by
-    while not bumped and y <= by + b.h do
-      c = pget(x, y)
-      if c ~= b.g.bc then
-        b.ci = {["x"] = x, ["y"] = y, ["c"] = c}
-        bumped = true
-      end
-      y = y + b.h
-    end
-    x = x + 1
-  end
-
-  -- sides, no outer corners
-  x = bx
-  while not bumped and x <= bx + b.w do
-    y = by + 1
-    while not bumped and y <= by + b.h - 1 do
-      c = pget(x, y)
-      if c ~= b.g.bc then
-        b.ci = {["x"] = x, ["y"] = y, ["c"] = c}
-        bumped = true
-      end
-      y = y + 1
-    end
-    x = x + b.w
-  end
-
-  if bumped then
-    local o = find_o(b.g, b.ci.x, b.ci.y)
-    local cf = 0.25 -- collision factor
-    if o then
-      o.b = b -- tell the bumped object who bumped it
-      b.g.msg = sgn((bx + b.w / 2) - b.ci.x)..","..sgn((by + b.h / 2) - b.ci.y)
-    end
-    -- bounce opposite the bumped pixel, relative to the ball center
-    b.vx = b.vx * sgn((bx + b.w / 2) - b.ci.x)
-    b.vy = b.vy * sgn((by + b.h / 2) - b.ci.y)
-  end
 end
 
 function nudge_b(b)
