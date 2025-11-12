@@ -15,7 +15,7 @@ function _init()
   resize_amt = 16
 
   -- set up a new colony
-  colony = new_colony(flr(max_w/2), flr(max_h/2))
+  colony = new_colony(flr(max_w/2), flr(max_h/2), 2, 3, max_w, max_h)
   randomize(colony)
   paused = false
 
