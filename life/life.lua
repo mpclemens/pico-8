@@ -1,6 +1,6 @@
 
 -- cells are colored by their age
-colors = {7, 12, 10, 9, 8, 14, 2, 1}
+colors = {5,6,7,15,14,8,2,4,9,10,11,3,12,13,1}
 
 function new_colony(w, h)
   -- initialize a colony of life cells of a maximum width and height
